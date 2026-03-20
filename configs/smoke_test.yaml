@@ -1,0 +1,98 @@
+# Smoke Test Configuration for DAOS-RFF
+# Uses minimal data (~1% of full dataset) for quick validation
+# Target: Lightning AI L4 GPU
+
+# Data Configuration
+data:
+  # Dataset settings - using real LoRa RFFI data
+  dataset_name: "lora_rffi_real"
+  # Download only ~1% of data for smoke test
+  smoke_test_fraction: 0.01
+  # Number of known devices (closed set)
+  num_known_devices: 5
+  # Number of unknown devices for open-set testing
+  num_unknown_devices: 2
+  # Spectrogram parameters
+  stft_n_fft: 256
+  stft_hop_length: 64
+  # Data splits
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  # Number of samples per device for smoke test
+  samples_per_device: 50
+  # Number of workers (reduced for smoke test)
+  num_workers: 2
+
+# Model Configuration
+model:
+  # Backbone
+  backbone: "resnet18"
+  pretrained: false  # No pretrained for smoke test
+  feature_dim: 512
+  embedding_dim: 128
+  # Evidential head
+  num_classes: 5  # Must match num_known_devices
+  # Adversarial components
+  num_channels: 3  # Number of channel conditions
+  num_domains: 2   # Source and target domains
+  # Loss weights
+  lambda_adv_channel: 0.1
+  lambda_adv_domain: 0.1
+  lambda_contrastive: 0.1
+  # Dropout
+  dropout_rate: 0.3
+
+# Training Configuration
+training:
+  # Reduced for smoke test
+  max_epochs: 3
+  batch_size: 8
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  # Optimizer
+  optimizer: "adamw"
+  # Scheduler
+  scheduler: "cosine"
+  warmup_epochs: 1
+  # Gradient clipping
+  gradient_clip_val: 1.0
+  # Mixed precision for L4 GPU efficiency
+  precision: "16-mixed"
+  # Checkpointing
+  save_top_k: 1
+  # Early stopping patience
+  patience: 2
+
+# Evaluation Configuration
+evaluation:
+  # Open-set detection threshold
+  uncertainty_threshold: 0.5
+  # Metrics to compute
+  metrics:
+    - "auroc"
+    - "aupr"
+    - "accuracy"
+    - "fpr_at_95_tpr"
+
+# Hardware Configuration (Lightning AI L4)
+hardware:
+  accelerator: "gpu"
+  devices: 1
+  strategy: "auto"
+
+# Logging
+logging:
+  project_name: "daos_rff_smoke_test"
+  log_every_n_steps: 5
+  enable_progress_bar: true
+
+# Paths
+paths:
+  data_dir: "./data/raw"
+  processed_dir: "./data/processed"
+  checkpoint_dir: "./checkpoints"
+  log_dir: "./logs"
+
+# Random seed for reproducibility
+seed: 42
