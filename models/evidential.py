@@ -107,11 +107,13 @@ def evidential_loss(
     device: torch.device = None,
 ) -> torch.Tensor:
     """
-    Compute evidential deep learning loss.
+    Compute evidential deep learning loss with numerical stability.
 
     Combines:
     1. Negative log-likelihood of Dirichlet for correct class
     2. KL divergence regularizer to avoid overconfident wrong predictions
+
+    NOTE: Uses float32 internally for numerical stability with mixed precision.
 
     Args:
         alpha: Dirichlet concentration parameters (B, K)
@@ -127,6 +129,9 @@ def evidential_loss(
     if device is None:
         device = alpha.device
 
+    # Cast to float32 for numerical stability
+    alpha = alpha.float()
+
     batch_size = alpha.shape[0]
 
     # One-hot encode target
@@ -135,10 +140,14 @@ def evidential_loss(
     # Dirichlet strength
     S = alpha.sum(dim=1, keepdim=True)
 
+    # Clamp alpha and S to prevent log(0) and numerical instability
+    alpha_clamped = torch.clamp(alpha, min=1e-6)
+    S_clamped = torch.clamp(S, min=1e-6)
+
     # Loss 1: Negative log-likelihood (Type II MLE)
     # L_nll = sum_k y_k * (log(S) - log(alpha_k))
     loss_nll = torch.sum(
-        target_onehot * (torch.log(S) - torch.log(alpha)),
+        target_onehot * (torch.log(S_clamped) - torch.log(alpha_clamped)),
         dim=1
     ).mean()
 
@@ -147,6 +156,9 @@ def evidential_loss(
 
     # Remove evidence for correct class
     alpha_tilde = target_onehot + (1 - target_onehot) * alpha
+
+    # Clamp for stability
+    alpha_tilde = torch.clamp(alpha_tilde, min=1e-6)
 
     # KL divergence between alpha_tilde and uniform prior
     alpha_tilde_sum = alpha_tilde.sum(dim=1, keepdim=True)
@@ -164,6 +176,9 @@ def evidential_loss(
             dim=1, keepdim=True
         )
     ).mean()
+
+    # Clamp KL divergence to prevent extreme values
+    kl_div = torch.clamp(kl_div, min=0.0, max=100.0)
 
     # Annealing coefficient for KL term
     annealing_coef = min(1.0, epoch / annealing_step)

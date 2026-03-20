@@ -143,7 +143,7 @@ class DAOS_RFF(pl.LightningModule):
         }
 
     def training_step(self, batch: Dict[str, torch.Tensor], batch_idx: int) -> torch.Tensor:
-        """Training step."""
+        """Training step with numerical stability for mixed precision."""
         x = batch['spectrogram']
         device_label = batch['device_label']
         channel_label = batch['channel_label']
@@ -176,15 +176,15 @@ class DAOS_RFF(pl.LightningModule):
             device=self.device,
         )
 
-        # 2. Channel adversary loss (on all samples)
+        # 2. Channel adversary loss (on all samples) - with stability
         loss_channel = F.cross_entropy(
-            outputs['channel_logits'],
+            outputs['channel_logits'].float(),  # Cast to float32 for stability
             channel_label,
         )
 
-        # 3. Domain adversary loss (on all samples)
+        # 3. Domain adversary loss (on all samples) - with stability
         loss_domain = F.cross_entropy(
-            outputs['domain_logits'],
+            outputs['domain_logits'].float(),  # Cast to float32 for stability
             domain_label,
         )
 
@@ -202,13 +202,16 @@ class DAOS_RFF(pl.LightningModule):
         self.channel_adversary.set_lambda(grl_lambda)
         self.domain_adversary.set_lambda(grl_lambda)
 
-        # Combined loss
+        # Combined loss with gradient scaling for stability
         loss = (
             loss_edl
             + self.hparams.lambda_adv_channel * loss_channel
             + self.hparams.lambda_adv_domain * loss_domain
             + self.hparams.lambda_contrastive * loss_con
         )
+
+        # Clamp loss to prevent NaN/Inf
+        loss = torch.clamp(loss, max=100.0)
 
         # Compute accuracy
         preds = outputs['prob'][known_mask].argmax(dim=1)

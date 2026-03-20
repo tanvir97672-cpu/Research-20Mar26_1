@@ -1,6 +1,6 @@
 # Smoke Test Configuration for DAOS-RFF
+# OPTIMIZED for Lightning AI L4 GPU (24GB VRAM)
 # Uses minimal data (~1% of full dataset) for quick validation
-# Target: Lightning AI L4 GPU
 
 # Data Configuration
 data:
@@ -19,10 +19,16 @@ data:
   train_ratio: 0.7
   val_ratio: 0.15
   test_ratio: 0.15
-  # Number of samples per device for smoke test
-  samples_per_device: 50
-  # Number of workers (reduced for smoke test)
-  num_workers: 2
+  # Number of samples per device - INCREASED for L4
+  samples_per_device: 100
+  # Number of workers - OPTIMIZED for L4 (8 vCPUs)
+  num_workers: 4
+  # Pin memory for faster GPU transfer
+  pin_memory: true
+  # Persistent workers to avoid respawning
+  persistent_workers: true
+  # Prefetch factor for data loading
+  prefetch_factor: 4
 
 # Model Configuration
 model:
@@ -43,26 +49,32 @@ model:
   # Dropout
   dropout_rate: 0.3
 
-# Training Configuration
+# Training Configuration - OPTIMIZED for L4 GPU
 training:
-  # Reduced for smoke test
-  max_epochs: 3
-  batch_size: 8
-  learning_rate: 0.001
+  # Epochs for smoke test
+  max_epochs: 5
+  # BATCH SIZE - L4 can handle much larger batches (24GB VRAM)
+  batch_size: 64
+  # Learning rate scaled for larger batch
+  learning_rate: 0.002
   weight_decay: 0.0001
   # Optimizer
   optimizer: "adamw"
   # Scheduler
   scheduler: "cosine"
   warmup_epochs: 1
-  # Gradient clipping
+  # Gradient clipping for stability
   gradient_clip_val: 1.0
-  # Mixed precision for L4 GPU efficiency
-  precision: "16-mixed"
+  # PRECISION - bf16-mixed is more stable than 16-mixed on L4
+  precision: "bf16-mixed"
   # Checkpointing
   save_top_k: 1
   # Early stopping patience
-  patience: 2
+  patience: 3
+  # Enable torch.compile for faster training (PyTorch 2.0+)
+  compile_model: true
+  # Gradient accumulation (effective batch = batch_size * accumulate)
+  accumulate_grad_batches: 1
 
 # Evaluation Configuration
 evaluation:
@@ -75,16 +87,20 @@ evaluation:
     - "accuracy"
     - "fpr_at_95_tpr"
 
-# Hardware Configuration (Lightning AI L4)
+# Hardware Configuration - Lightning AI L4 GPU
 hardware:
   accelerator: "gpu"
   devices: 1
   strategy: "auto"
+  # Enable Tensor Cores with TF32
+  matmul_precision: "high"
+  # Enable cuDNN benchmarking for optimal kernels
+  cudnn_benchmark: true
 
 # Logging
 logging:
   project_name: "daos_rff_smoke_test"
-  log_every_n_steps: 5
+  log_every_n_steps: 10
   enable_progress_bar: true
 
 # Paths

@@ -353,10 +353,18 @@ def create_dataloaders(
     smoke_test: bool = True,
     smoke_test_fraction: float = 0.01,
     seed: int = 42,
+    pin_memory: bool = True,
+    persistent_workers: bool = True,
+    prefetch_factor: Optional[int] = 4,
     **kwargs,
 ) -> Tuple[DataLoader, DataLoader, DataLoader]:
     """
     Create train, validation, and test dataloaders.
+
+    Optimized for Lightning AI L4 GPU with:
+    - Pin memory for faster GPU transfer
+    - Persistent workers to avoid respawning overhead
+    - Prefetch factor for overlapping data loading
 
     Args:
         data_dir: Data directory
@@ -367,6 +375,10 @@ def create_dataloaders(
         samples_per_device: Samples per device
         smoke_test: Whether this is smoke test
         smoke_test_fraction: Fraction for smoke test
+        seed: Random seed
+        pin_memory: Pin memory for GPU transfer
+        persistent_workers: Keep workers alive between epochs
+        prefetch_factor: Number of batches to prefetch per worker
 
     Returns:
         Tuple of (train_loader, val_loader, test_loader)
@@ -385,29 +397,38 @@ def create_dataloaders(
     val_dataset = LoRaRFFIDataset(split="val", **common_args)
     test_dataset = LoRaRFFIDataset(split="test", **common_args)
 
+    # Common dataloader kwargs for L4 GPU optimization
+    loader_kwargs = {
+        "num_workers": num_workers,
+        "pin_memory": pin_memory,
+    }
+
+    # Only add these if num_workers > 0
+    if num_workers > 0:
+        loader_kwargs["persistent_workers"] = persistent_workers
+        if prefetch_factor is not None:
+            loader_kwargs["prefetch_factor"] = prefetch_factor
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=num_workers,
-        pin_memory=True,
         drop_last=True,
+        **loader_kwargs,
     )
 
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
+        **loader_kwargs,
     )
 
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
+        **loader_kwargs,
     )
 
     return train_loader, val_loader, test_loader
